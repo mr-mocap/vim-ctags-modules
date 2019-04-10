@@ -1,4 +1,10 @@
 #!/bin/bash
+#
+# Input (command-line): a module name
+#
+# Output:
+#         tags/<module_name>     (The generated tags file)
+#         vim_path/<module_name> (The generated file for use in adding to Vim's 'path' variable)
 
 SCRIPT_VERSION=1
 DRY_RUN=0
@@ -16,7 +22,11 @@ CPP_KINDS=cdefgmstuvp
 CPP_FIELDS=+iaSmKtz
 EXTRA_FIELDS=+q
 
-CTAGS_BASE_DIR=$HOME/.vim/ctags
+# Set CTAGS_BASE_DIR to be the directory above this script.
+DIR_OF_SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+CTAGS_BASE_DIR=$(dirname $DIR_OF_SCRIPT)
+
+# Set the names of the various sub-directories.
 CTAGS_IGNORE_DIR=$CTAGS_BASE_DIR/ignore
 CTAGS_OUTPUT_DIR=$CTAGS_BASE_DIR/tags
 CTAGS_FILES_DIR=$CTAGS_BASE_DIR/files
