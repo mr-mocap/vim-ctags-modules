@@ -1,0 +1,1 @@
+Each file contains a list of header files that are defined for each standard.  Deprecated pre-ANSI C++ headers are left out (i.e. strstream).

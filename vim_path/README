@@ -1,0 +1,4 @@
+This is where the individual generated files containing the Vim 'path' setting
+for each module are stored.
+Each line in the file is a separate value to be added, in order, to the 'path'
+variable.

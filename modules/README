@@ -1,0 +1,20 @@
+Each file in this directory corresponds to a MODULE.
+Each line in the file gives information about said module, where each line is meant to be
+a colon-separated variable/value combination.
+($CTAGS_BASE_DIR = ..)
+
+Possible variables:
+INPUT_FILES     Gives a space-separated list of files to be scanned.
+INPUT_DIRECTORY Gives a directory that is to be recursively scanned. (ctags -R option is added)
+IGNORE          Gives a filename that is used for ignoring tags (ctags -I@$CTAGS_BASE_DIR/ignore/${filename}).
+                This allows for more than one module to share a single ignore file.
+                By default, the ignore file is the same as the module name and is located in the ignore directory, unless this is specified.
+PATH            List of one-or-more directories appropriate for adding to Vim's 'path' option.
+                This is typically only specified if there are either:
+                1) Multiple directories that contain the header files. (ex: WxWidgets is spread across multiple directories)
+                2) The top-level directory for the module is not directly under "/usr/include", but
+                   instead under a subdirectory of that.  (ex: For GTK, there is no "/usr/include/gtk"
+                   directory, but instead everything is under either "/usr/include/gtk-2.0" or
+                   "/usr/include/gtk-3.0" depending upon the version you are developing against).
+                3) The top-level directory is somewhere OTHER that under "/usr/include".  This could be useful for a
+                   specially-installed library.

@@ -1,0 +1,4 @@
+This directory contains one file for a given module with the filename being the module name,
+but only if that module needs to add the "--exclude=" flag to the ctags invocation.
+
+File format: one line per entry

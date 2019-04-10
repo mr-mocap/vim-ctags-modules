@@ -1,0 +1,410 @@
+#!/bin/bash
+
+SCRIPT_VERSION=1
+DRY_RUN=0
+
+# Errors
+OK=0
+UNKNOWN_OPTION=1
+MISSING_OPTION_ARGUMENT=2
+UNKNOWN_OPTION_ERROR=3
+MODULE_DOES_NOT_EXIST=4
+
+# General variables
+#CPP_KINDS=cdefgmstuv-p
+CPP_KINDS=cdefgmstuvp
+CPP_FIELDS=+iaSmKtz
+EXTRA_FIELDS=+q
+
+CTAGS_BASE_DIR=$HOME/.vim/ctags
+CTAGS_IGNORE_DIR=$CTAGS_BASE_DIR/ignore
+CTAGS_OUTPUT_DIR=$CTAGS_BASE_DIR/tags
+CTAGS_FILES_DIR=$CTAGS_BASE_DIR/files
+CTAGS_MODULE_DIR=$CTAGS_BASE_DIR/modules
+CTAGS_VIM_PATH_DIR=$CTAGS_BASE_DIR/vim_path
+CTAGS_EXCLUDE_DIR=$CTAGS_BASE_DIR/exclude
+
+# Module to work with
+CTAGS_MODULE_NAME=unknown
+
+# Subroutines
+
+# UNUSED
+system_c_header_include_locations()
+{
+  local STUFF=$(g++ -v -E -x c++ - < /dev/null)
+}
+
+# Generate a list of header files that this header file includes.
+# Expects $1 to be the header file to output the dependencies of.
+# cpp -x c -M /usr/include/time.h | cut -d: -f2 | sed 's/ \\$//g' - | tr \\n ' '
+system_header_file_dependencies()
+{
+  #  For sed, first strip off the line-continuation character suffix (with preceeding space).
+  #  Then strip off the leading space of the continued lines.
+  #  Finally, we assume that any other spaces are the separators between filenames.  We then replace
+  #  those spaces with newlines.  Voiala! We have each filename on it's own line.
+  cpp -x c -M $1 | cut -d: -f2 | sed 's/ \\$//g; s/^ //g' - | tr ' ' \\n
+}
+
+# Outputs the c standard include files (absolute path), one per line.
+c_standard_include_files()
+{
+  for i in $(cat $(find $CTAGS_FILES_DIR -name c[[:digit:]]* -print) );do
+    if [[ -e /usr/include/$i ]]; then
+      echo /usr/include/$i;
+    elif [[ -e $SYSTEM/$i ]]; then
+      echo $SYSTEM/$i;
+    elif [[ -e $SYSTEM2/$i ]]; then
+      echo $SYSTEM2/$i;
+    fi;
+  done
+}
+
+
+# Outputs all of the header files, and their included files, for the
+# ANSI C standard headers.
+c_system_include_files()
+{
+  (while read -r line; do
+    #printf '%s\n' "$line"
+    system_header_file_dependencies $line
+  done <<< "$( c_standard_include_files )") | sort | uniq
+}
+
+# Input: $1 = filename containing header files, one per line.
+convert_header_files_to_exclude_list()
+{
+  while read -r line; do
+    printf '%s=%s\n' "--exclude" "$line"
+  done < "$1"
+}
+
+# Used for generating a list of "--exclude=pattern" entries for the ctags program.
+#
+# Input: $1 = modulename containing header files, one per line.
+# Output: Empty string if no exclude file exists, otherwise, an expanded string representing what to exclude.
+generate_ctags_exclude_array()
+{
+  local EXCLUDE
+
+  if [ -e "$CTAGS_EXCLUDE_DIR/$1" ]; then
+    while read -r line; do
+      EXCLUDE+=(--exclude=$line)
+    done < "$CTAGS_EXCLUDE_DIR/$1"
+  fi
+  echo ${EXCLUDE[@]}
+}
+
+# Return: The filename containing the list of C headers used by the system.
+generate_c_headers_list_filename()
+{
+  local INSTALL_DIR=$(gcc -print-search-dirs | grep install: | cut -d" " -f 2)
+
+  # Needed by c_system_include_files()
+  SYSTEM=${INSTALL_DIR}include
+  SYSTEM2=${INSTALL_DIR}include-fixed
+
+  # C
+  # First, let's generate the list of headers that will be looked at and save that out to a file.
+  local C_HEADERS_LIST_FILENAME=$(mktemp)
+
+  c_system_include_files >$C_HEADERS_LIST_FILENAME
+  echo $C_HEADERS_LIST_FILENAME
+}
+
+generate_c_module_tags()
+{
+  echo Generating c module tags...
+  local C_HEADERS_LIST_FILENAME=$(generate_c_headers_list_filename)
+
+  local C_TARGET=$(gcc -v 2>&1 | grep "Target:" | cut -d" " -f2)
+
+  local MAIN_INCLUDE_DIR="/usr/include"
+
+  local C_TARGET_DIR="$MAIN_INCLUDE_DIR/$C_TARGET"
+
+  local INSTALL_DIR=$(gcc -print-search-dirs | grep "install:" | cut -d" " -f2)
+
+  if [ "$DRY_RUN" == 1 ]; then
+    echo "ctags -n -f $CTAGS_OUTPUT_DIR/c --c-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c --langmap=c:.h -I@$CTAGS_IGNORE_DIR/c -L $C_HEADERS_LIST_FILENAME"
+  else
+    # Actually run the command.
+
+    rm -f $CTAGS_OUTPUT_DIR/c
+
+    # Invoke ctags using the -L option to give the list of files to generate tags for.
+    ctags -n -f $CTAGS_OUTPUT_DIR/c --c-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c --langmap=c:.h -I@$CTAGS_IGNORE_DIR/c -L $C_HEADERS_LIST_FILENAME
+
+    # Generate a file containing appropriate Vim "path" settings, one per line.
+    echo "$MAIN_INCLUDE_DIR" >$CTAGS_VIM_PATH_DIR/c
+    echo "$C_TARGET_DIR" >>$CTAGS_VIM_PATH_DIR/c
+
+    # ASSUME: A directory that ends with "/" AND there are *.h files under it at some level.
+    echo "$INSTALL_DIR**" >>$CTAGS_VIM_PATH_DIR/c
+
+    # Now let's setup for excluding these exact files from future generation of tags.
+    #readarray EXCLUDE_C_FILES < <(convert_header_files_to_exclude_list $C_HEADERS_LIST_FILENAME)
+  fi
+
+  # Erase the generated file.
+  rm -f $C_HEADERS_LIST_FILENAME
+}
+
+generate_cpp_module_tags()
+{
+  echo Generating cpp module tags...
+
+  local MAIN_INCLUDE_DIR="/usr/include"
+
+  local CPP_VERSION=$(g++ -dumpversion)
+
+  # We will use this for looking in several places with this same directory structure
+  local CPP_INCLUDE_DIR_VERSION="c++/"${CPP_VERSION}
+
+  local CPP_TARGET=$(g++ -v 2>&1 | grep -e "Target:" | cut -d" " -f2)
+
+  # I don't know why I needed this line below.  Perhaps a special compiler installation?
+  #local INC_DIR=$(g++ -v 2>&1 | grep -P -e "--with-gxx-include-dir=[^ ]*" -o | cut -d= -f2)
+  local INC_DIR="$MAIN_INCLUDE_DIR/$CPP_INCLUDE_DIR_VERSION"
+
+  # The compiler-target dir
+  local CPP_TARGET_DIR="$MAIN_INCLUDE_DIR/$CPP_TARGET/$CPP_INCLUDE_DIR_VERSION"
+
+  # Generate an array containing all the directories to scan.
+  #local CPP_TAG_DIRECTORIES=("$INC_DIR/**/*" "$CPP_TARGET_DIR/**/*")
+  local CPP_TAG_DIRECTORIES=("$INC_DIR" "$CPP_TARGET_DIR")
+
+  local EXCLUDE_PATHS=$(generate_ctags_exclude_array cpp)
+
+  local IGNORE_FILE=""
+
+  if [ -e "$CTAGS_IGNORE_DIR/cpp" ]; then
+    IGNORE_FILE="-I@$CTAGS_IGNORE_DIR/cpp"
+  fi
+
+  if [ "$DRY_RUN" == 1 ]; then
+    #echo "ctags -n -f $CTAGS_OUTPUT_DIR/cpp ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c,c++ -I@$CTAGS_IGNORE_DIR/gcc_cxx --recurse ${CPP_TAG_DIRECTORIES[@]}"
+    echo "ctags -n -f $CTAGS_OUTPUT_DIR/cpp ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c,c++ "$IGNORE_FILE" --recurse ${CPP_TAG_DIRECTORIES[@]}"
+  else
+    # Let's be explicit about exactly what types of tags to generate.
+    # NOTE: .tcc files are C++ template files.
+    # GCC System stuff <sys/cdefs.h>
+    #
+
+    # Remove the old tags file first...
+    rm -f $CTAGS_OUTPUT_DIR/cpp
+
+    # Hard-code in the main C++ directories to ignore via --exclude.  This allows us to provide a simple input of only a few recursive directories.
+    ctags -n -f $CTAGS_OUTPUT_DIR/cpp ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c++ -I@$CTAGS_IGNORE_DIR/gcc_cxx --recurse ${CPP_TAG_DIRECTORIES[@]}
+
+    # Output the appropriate Vim "path" setting for finding these files, one per line
+    rm -f $CTAGS_VIM_PATH_DIR/cpp
+
+    for dir in ${CPP_TAG_DIRECTORIES[@]}; do
+      echo "$dir" >>$CTAGS_VIM_PATH_DIR/cpp
+    done
+  fi
+}
+
+# Currently NOT USED!!!
+generate_system_tags()
+{
+  echo Generating /usr/include module tags...
+  if (( 0 )); then
+    # Original implementation.
+    local C_HEADERS_LIST_FILENAME=$(generate_c_headers_list_filename)
+
+    # NOTE: first call generate_c_module_tags()
+    local CPP_TARGET=$(g++ -v 2>&1 | grep -e "Target:" | cut -d" " -f2)
+
+    if [ "$DRY_RUN" == 1 ]; then
+      echo "ctags --exclude="/usr/include/c++" --exclude=/usr/include/$CPP_TARGET/c++ --exclude="/usr/include/X11" --exclude=$BOOST_DIR --exclude="/usr/include/wx-3.0" --exclude="/usr/include/log4cxx" --exclude=@$C_HEADERS_LIST_FILENAME --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c,c++ -I@$CTAGS_IGNORE_DIR/c -R -f $CTAGS_OUTPUT_DIR/usr_include /usr/include"
+    else
+      # Actually run the command.
+
+      # C++ /usr/include (but, leave out the directories we've just generated items for above)
+      rm -f $CTAGS_OUTPUT_DIR/usr_include
+
+      # Precondition: $EXCLUDE_C_FILES is an array that must be generated at this point.
+      #ctags --exclude="/usr/include/c++" --exclude=/usr/include/$CPP_TARGET/c++ --exclude="/usr/include/X11" --exclude=$BOOST_DIR --exclude="/usr/include/wx-3.0" --exclude="/usr/include/log4cxx" ${EXCLUDE_C_FILES[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c,c++ -I@$CTAGS_IGNORE_DIR/c -R -f $CTAGS_OUTPUT_DIR/usr_include /usr/include
+
+      # Uses the $C_HEADERS_LIST_FILENAME variable to tell ctags to exclude specific files.
+      ctags --exclude="/usr/include/c++" --exclude=/usr/include/$CPP_TARGET/c++ --exclude="/usr/include/X11" --exclude=$BOOST_DIR --exclude="/usr/include/wx-3.0" --exclude="/usr/include/log4cxx" --exclude=@$C_HEADERS_LIST_FILENAME --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c,c++ -I@$CTAGS_IGNORE_DIR/c -R -f $CTAGS_OUTPUT_DIR/usr_include /usr/include
+    fi
+  else
+    # Newer implementation.  Let's just grab all /usr/include/*.h files and run them through ctags.
+    if [ "$DRY_RUN" == 1 ]; then
+      echo "ctags -n -f $CTAGS_OUTPUT_DIR/system --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c,c++ -I@$CTAGS_IGNORE_DIR/c /usr/include/*.h"
+    else
+      rm -f $CTAGS_OUTPUT_DIR/system
+
+      ctags -n -f $CTAGS_OUTPUT_DIR/system --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c,c++ -I@$CTAGS_IGNORE_DIR/c /usr/include/*.h
+    fi
+  fi
+}
+
+generatetagsformodule()
+{
+  local module=$1
+
+  if [ "$module" == "c" ]; then
+    generate_c_module_tags
+  elif [ "$module" == "cpp" ]; then
+    generate_cpp_module_tags
+  else
+    # Normal module...
+    local module_filename=$CTAGS_MODULE_DIR/$module
+
+    # Check to see if we even have data for the module.
+    if [ -e "$module_filename" ]; then
+      # Module file exists!
+      local module_input_files=$(cat $module_filename | grep INPUT_FILES: | cut -d: -f2)
+      local module_input_directory=$(cat $module_filename | grep INPUT_DIRECTORY: | cut -d: -f2)
+      local module_ignore_files=$(cat $module_filename | grep IGNORE: | cut -d: -f2)
+      local module_output_filename=$CTAGS_OUTPUT_DIR/$module
+      local module_output_filename_option="-f $module_output_filename"
+
+      # Go ahead and set the input files.  Change it if it is actually a directory later.
+      local module_input_files_option=$module_input_files
+    else
+      echo "Module $module does not exist"
+      exit $MODULE_DOES_NOT_EXIST
+    fi
+
+    # Check to see if we need to add the recursive option (we have a directory as input).
+    # IF $module_input_directory string length is > 0...
+    if [[ ${#module_input_directory} > 0 ]]; then
+      local module_recursive_option="-R"
+      module_input_files_option=$module_input_directory
+    fi
+
+    echo "module ignore file = \"${module_ignore_files:+${module_ignore_files}}\""
+
+    # Check to see if we need to ignore special tags in the module.
+    if [[ ${#module_ignore_files} == 0 ]]; then
+      # No ignore command specified in the module file.  Check for the existence of a module file.
+      if [ -e "$CTAGS_IGNORE_DIR/$module" ]; then
+        # We have one.  Ignore stuff in it.
+        local module_ignoretags_filename=$CTAGS_IGNORE_DIR/$module
+        local module_ignore_file_option="-I@$module_ignoretags_filename"
+      fi
+    else
+      # We have a specific ignore file.  Let's set the ignore option to that.
+      local module_ignoretags_filename=$CTAGS_IGNORE_DIR/$module_ignore_files
+      local module_ignore_file_option="-I@$module_ignoretags_filename"
+    fi
+
+    echo "module = $module"
+    echo "input files = \"$module_input_files\""
+    echo "input directory = \"$module_input_directory\""
+    echo "output file = \"$module_output_filename\""
+    echo "module input files = \"$module_input_files_option\""
+    echo "module recursive option = \"$module_recursive_option\""
+    echo "module igonore file option = \"$module_ignore_file_option\""
+
+    if [ "$DRY_RUN" == 1 ]; then
+      echo "ctags ${module_recursive_option:+${module_recursive_option}} $module_output_filename_option --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS ${module_ignore_file_option:+${module_ignore_file_option}} -n $module_input_files_option"
+    else
+      # Actually run the command.
+      ctags ${module_recursive_option:+${module_recursive_option}} $module_output_filename_option --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS ${module_ignore_file_option:+${module_ignore_file_option}} -n $module_input_files_option
+    fi
+  fi
+}
+# END of Subroutines
+
+printsynopsis()
+{
+  echo "Usage: createtags [OPTIONS] <module_name>"
+  echo ""
+  echo "NOTE: c and cpp are special modules that aren't listed via the -l option."
+  echo "      The c module represents the header files for the C compilation environment."
+  echo "      The cpp module represents the header files for the C++ compilation environment."
+  echo
+  echo "OPTIONS"
+  echo "  -l    List module names"
+  echo "  -n    Print the command that would be executed instead of running it"
+  echo "  -v    Output version number"
+  echo "  -r    Print return values"
+}
+
+printversion()
+{
+  echo $SCRIPT_VERSION
+}
+
+printreturnvalues()
+{
+  echo "$OK = OK"
+  echo "$UNKNOWN_OPTION = UNKNOWN_OPTION"
+  echo "$MISSING_OPTION_ARGUMENT = MISSING_OPTION_ARGUMENT"
+  echo "$UNKNOWN_OPTION_ERROR = UNKNOWN_OPTION_ERROR"
+  echo "$MODULE_DOES_NOT_EXIST = MODULE_DOES_NOT_EXIST"
+}
+
+printmodules()
+{
+  # Ignore README file.
+  MODULES=$(ls -I README $CTAGS_MODULE_DIR)
+  if [ -z "$MODULES" ]; then
+    echo "No modules present"
+  else
+    echo $MODULES
+  fi
+}
+
+setoptions()
+{
+  if [ $# == 0 ]; then
+    printsynopsis
+    exit 0
+  fi
+  while getopts "hvrln" optname
+    do
+      case "$optname" in
+        "?")
+          echo "Unknown option $OPTARG"
+          exit $UNKNOWN_OPTION
+          ;;
+        "h")
+          printsynopsis
+          exit $OK
+          ;;
+        "v")
+          printversion
+          exit $OK
+          ;;
+        "r")
+          printreturnvalues
+          exit $OK
+          ;;
+        "l")
+          printmodules
+          exit $OK
+          ;;
+        "n")
+          DRY_RUN=1
+          ;;
+        ";")
+          echo "No argument value for option $OPTARG"
+          exit $MISSING_OPTION_ARGUMENT
+          ;;
+        *)
+          # Should not occur
+          echo "Unknown error while processing options"
+          exit $UNKNOWN_OPTION_ERROR
+          ;;
+      esac
+    done
+  return $OPTIND
+}
+
+setoptions "$@"
+argstart=$?
+
+# Get the module name
+CTAGS_MODULE_NAME=${@:$argstart:${#argstart}}
+
+generatetagsformodule $CTAGS_MODULE_NAME
+
+exit $OK
