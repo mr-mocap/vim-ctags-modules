@@ -126,6 +126,7 @@ generate_c_headers_list_filename()
 generate_c_module_tags()
 {
   echo Generating c module tags...
+  local MODULE_NAME="c"
   local C_HEADERS_LIST_FILENAME=$(generate_c_headers_list_filename)
 
   local C_TARGET=$(gcc -v 2>&1 | grep "Target:" | cut -d" " -f2)
@@ -137,21 +138,21 @@ generate_c_module_tags()
   local INSTALL_DIR=$(gcc -print-search-dirs | grep "install:" | cut -d" " -f2)
 
   if [ "$DRY_RUN" == 1 ]; then
-    echo "ctags -n -f $CTAGS_OUTPUT_DIR/c --c-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c --langmap=c:.h -I@$CTAGS_IGNORE_DIR/c -L $C_HEADERS_LIST_FILENAME"
+    echo "ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME --c-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c --langmap=c:.h -I@$CTAGS_IGNORE_DIR/$MODULE_NAME -L $C_HEADERS_LIST_FILENAME"
   else
     # Actually run the command.
 
-    rm -f $CTAGS_OUTPUT_DIR/c
+    rm -f $CTAGS_OUTPUT_DIR/$MODULE_NAME
 
     # Invoke ctags using the -L option to give the list of files to generate tags for.
-    ctags -n -f $CTAGS_OUTPUT_DIR/c --c-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c --langmap=c:.h -I@$CTAGS_IGNORE_DIR/c -L $C_HEADERS_LIST_FILENAME
+    ctags -n -f $CTAGS_OUTPUT_DIR/c --c-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c --langmap=c:.h -I@$CTAGS_IGNORE_DIR/$MODULE_NAME -L $C_HEADERS_LIST_FILENAME
 
     # Generate a file containing appropriate Vim "path" settings, one per line.
-    echo "$MAIN_INCLUDE_DIR" >$CTAGS_VIM_PATH_DIR/c
-    echo "$C_TARGET_DIR" >>$CTAGS_VIM_PATH_DIR/c
+    echo "$MAIN_INCLUDE_DIR" >$CTAGS_VIM_PATH_DIR/$MODULE_NAME
+    echo "$C_TARGET_DIR" >>$CTAGS_VIM_PATH_DIR/$MODULE_NAME
 
     # ASSUME: A directory that ends with "/" AND there are *.h files under it at some level.
-    echo "$INSTALL_DIR**" >>$CTAGS_VIM_PATH_DIR/c
+    echo "$INSTALL_DIR**" >>$CTAGS_VIM_PATH_DIR/$MODULE_NAME
 
     # Now let's setup for excluding these exact files from future generation of tags.
     #readarray EXCLUDE_C_FILES < <(convert_header_files_to_exclude_list $C_HEADERS_LIST_FILENAME)
@@ -165,6 +166,7 @@ generate_cpp_module_tags()
 {
   echo Generating cpp module tags...
 
+  local MODULE_NAME="cpp"
   local MAIN_INCLUDE_DIR="/usr/include"
 
   local CPP_VERSION=$(g++ -dumpversion)
@@ -182,20 +184,18 @@ generate_cpp_module_tags()
   local CPP_TARGET_DIR="$MAIN_INCLUDE_DIR/$CPP_TARGET/$CPP_INCLUDE_DIR_VERSION"
 
   # Generate an array containing all the directories to scan.
-  #local CPP_TAG_DIRECTORIES=("$INC_DIR/**/*" "$CPP_TARGET_DIR/**/*")
   local CPP_TAG_DIRECTORIES=("$INC_DIR" "$CPP_TARGET_DIR")
 
-  local EXCLUDE_PATHS=$(generate_ctags_exclude_array cpp)
+  local EXCLUDE_PATHS=$(generate_ctags_exclude_array $MODULE_NAME)
 
   local IGNORE_FILE=""
 
-  if [ -e "$CTAGS_IGNORE_DIR/cpp" ]; then
-    IGNORE_FILE="-I@$CTAGS_IGNORE_DIR/cpp"
+  if [ -e "$CTAGS_IGNORE_DIR/$MODULE_NAME" ]; then
+    IGNORE_FILE="-I@$CTAGS_IGNORE_DIR/$MODULE_NAME"
   fi
 
   if [ "$DRY_RUN" == 1 ]; then
-    #echo "ctags -n -f $CTAGS_OUTPUT_DIR/cpp ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c,c++ -I@$CTAGS_IGNORE_DIR/gcc_cxx --recurse ${CPP_TAG_DIRECTORIES[@]}"
-    echo "ctags -n -f $CTAGS_OUTPUT_DIR/cpp ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c,c++ "$IGNORE_FILE" --recurse ${CPP_TAG_DIRECTORIES[@]}"
+    echo "ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c,c++ "$IGNORE_FILE" --recurse ${CPP_TAG_DIRECTORIES[@]}"
   else
     # Let's be explicit about exactly what types of tags to generate.
     # NOTE: .tcc files are C++ template files.
@@ -203,16 +203,16 @@ generate_cpp_module_tags()
     #
 
     # Remove the old tags file first...
-    rm -f $CTAGS_OUTPUT_DIR/cpp
+    rm -f $CTAGS_OUTPUT_DIR/$MODULE_NAME
 
     # Hard-code in the main C++ directories to ignore via --exclude.  This allows us to provide a simple input of only a few recursive directories.
-    ctags -n -f $CTAGS_OUTPUT_DIR/cpp ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c++ -I@$CTAGS_IGNORE_DIR/gcc_cxx --recurse ${CPP_TAG_DIRECTORIES[@]}
+    ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c++ "$IGNORE_FILE" --recurse ${CPP_TAG_DIRECTORIES[@]}
 
     # Output the appropriate Vim "path" setting for finding these files, one per line
     rm -f $CTAGS_VIM_PATH_DIR/cpp
 
     for dir in ${CPP_TAG_DIRECTORIES[@]}; do
-      echo "$dir" >>$CTAGS_VIM_PATH_DIR/cpp
+      echo "$dir" >>$CTAGS_VIM_PATH_DIR/$MODULE_NAME
     done
   fi
 }
