@@ -125,7 +125,6 @@ generate_c_headers_list_filename()
 
 generate_c_module_tags()
 {
-  echo Generating c module tags...
   local MODULE_NAME="c"
   local C_HEADERS_LIST_FILENAME=$(generate_c_headers_list_filename)
 
@@ -138,9 +137,11 @@ generate_c_module_tags()
   local INSTALL_DIR=$(gcc -print-search-dirs | grep "install:" | cut -d" " -f2)
 
   if [ "$DRY_RUN" == 1 ]; then
+    echo Dry-run generation of $MODULE_NAME module tags...
     echo "ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME --c-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c --langmap=c:.h -I@$CTAGS_IGNORE_DIR/$MODULE_NAME -L $C_HEADERS_LIST_FILENAME"
   else
     # Actually run the command.
+    echo Generating $MODULE_NAME module tags...
 
     rm -f $CTAGS_OUTPUT_DIR/$MODULE_NAME
 
@@ -164,8 +165,6 @@ generate_c_module_tags()
 
 generate_cpp_module_tags()
 {
-  echo Generating cpp module tags...
-
   local MODULE_NAME="cpp"
   local MAIN_INCLUDE_DIR="/usr/include"
 
@@ -195,12 +194,15 @@ generate_cpp_module_tags()
   fi
 
   if [ "$DRY_RUN" == 1 ]; then
+    echo Dry-run generation of $MODULE_NAME module tags...
     echo "ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c,c++ "$IGNORE_FILE" --recurse ${CPP_TAG_DIRECTORIES[@]}"
   else
     # Let's be explicit about exactly what types of tags to generate.
     # NOTE: .tcc files are C++ template files.
     # GCC System stuff <sys/cdefs.h>
     #
+
+    echo Generating $MODULE_NAME module tags...
 
     # Remove the old tags file first...
     rm -f $CTAGS_OUTPUT_DIR/$MODULE_NAME
@@ -254,6 +256,9 @@ generate_system_tags()
   fi
 }
 
+# Used for generating the tags for a generic "module".
+#
+# Input: $1 = modulename
 generatetagsformodule()
 {
   local module=$1
@@ -285,7 +290,7 @@ generatetagsformodule()
     # Check to see if we need to add the recursive option (we have a directory as input).
     # IF $module_input_directory string length is > 0...
     if [[ ${#module_input_directory} > 0 ]]; then
-      local module_recursive_option="-R"
+      local module_recursive_option="--recurse"
       module_input_files_option=$module_input_directory
     fi
 
@@ -314,10 +319,11 @@ generatetagsformodule()
     echo "module igonore file option = \"$module_ignore_file_option\""
 
     if [ "$DRY_RUN" == 1 ]; then
-      echo "ctags ${module_recursive_option:+${module_recursive_option}} $module_output_filename_option --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS ${module_ignore_file_option:+${module_ignore_file_option}} -n $module_input_files_option"
+      echo Dry-run generation of $module module tags...
+      echo "ctags -n $module_output_filename_option --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS ${module_ignore_file_option:+${module_ignore_file_option}} ${module_recursive_option:+${module_recursive_option}} $module_input_files_option"
     else
-      # Actually run the command.
-      ctags ${module_recursive_option:+${module_recursive_option}} $module_output_filename_option --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS ${module_ignore_file_option:+${module_ignore_file_option}} -n $module_input_files_option
+      echo Generating $module module tags...
+      ctags -n $module_output_filename_option --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS ${module_ignore_file_option:+${module_ignore_file_option}} ${module_recursive_option:+${module_recursive_option}} $module_input_files_option
     fi
   fi
 }
