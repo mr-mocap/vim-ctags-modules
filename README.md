@@ -28,13 +28,15 @@ Contains the `createtags` command.
 
 files
 ---
-Contains files representing 
+Contains files for each standard of the C and C++ language.  Each file representing that standard contains a list of the header files, one per line, the given standard added to the previous standard.
 
 exclude
 ---
+Contains a file per module.  Each file lists, one per line, a pattern to pass to the --exclude option.  Used to exclude input files.
 
 ignore
 ---
+Contains a file per module.  Each file lists, one per line, a preprocessor macro to ignore.  These are passed to the -I option.
 
 modules
 ---
@@ -42,6 +44,9 @@ Contains files defining the available modules.
 
 tags
 ---
+The output tags file for each module.
 
 vim_path
 ---
+If it exists for a given module, a file containing the directories that were searched for the input tag file generation.
+Useful for adding to Vim's 'path' variable, which will allow for using Vim's 'gf', ]I, etc. to find header files for the module.
