@@ -318,12 +318,11 @@ printreturnvalues()
 printmodules()
 {
   # Ignore README file.
-  MODULES=$(ls -I README $CTAGS_MODULE_DIR)
-  if [ -z "$MODULES" ]; then
-    echo "No modules present"
-  else
-    echo $MODULES
-  fi
+  # c and cpp modules are built-ins that are always available.
+  MODULES=("c" "cpp" $(ls -I README $CTAGS_MODULE_DIR))
+
+  # There will ALWAYS be at least the "c" and "cpp" modules, so we can just print here.
+  echo ${MODULES[@]}
 }
 
 setoptions()
