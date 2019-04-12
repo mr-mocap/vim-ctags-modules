@@ -39,12 +39,6 @@ CTAGS_MODULE_NAME=unknown
 
 # Subroutines
 
-# UNUSED
-system_c_header_include_locations()
-{
-  local STUFF=$(g++ -v -E -x c++ - < /dev/null)
-}
-
 # Generate a list of header files that this header file includes.
 # Expects $1 to be the header file to output the dependencies of.
 # cpp -x c -M /usr/include/time.h | cut -d: -f2 | sed 's/ \\$//g' - | tr \\n ' '
@@ -216,43 +210,6 @@ generate_cpp_module_tags()
     for dir in ${CPP_TAG_DIRECTORIES[@]}; do
       echo "$dir" >>$CTAGS_VIM_PATH_DIR/$MODULE_NAME
     done
-  fi
-}
-
-# Currently NOT USED!!!
-generate_system_tags()
-{
-  echo Generating /usr/include module tags...
-  if (( 0 )); then
-    # Original implementation.
-    local C_HEADERS_LIST_FILENAME=$(generate_c_headers_list_filename)
-
-    # NOTE: first call generate_c_module_tags()
-    local CPP_TARGET=$(g++ -v 2>&1 | grep -e "Target:" | cut -d" " -f2)
-
-    if [ "$DRY_RUN" == 1 ]; then
-      echo "ctags --exclude="/usr/include/c++" --exclude=/usr/include/$CPP_TARGET/c++ --exclude="/usr/include/X11" --exclude=$BOOST_DIR --exclude="/usr/include/wx-3.0" --exclude="/usr/include/log4cxx" --exclude=@$C_HEADERS_LIST_FILENAME --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c,c++ -I@$CTAGS_IGNORE_DIR/c -R -f $CTAGS_OUTPUT_DIR/usr_include /usr/include"
-    else
-      # Actually run the command.
-
-      # C++ /usr/include (but, leave out the directories we've just generated items for above)
-      rm -f $CTAGS_OUTPUT_DIR/usr_include
-
-      # Precondition: $EXCLUDE_C_FILES is an array that must be generated at this point.
-      #ctags --exclude="/usr/include/c++" --exclude=/usr/include/$CPP_TARGET/c++ --exclude="/usr/include/X11" --exclude=$BOOST_DIR --exclude="/usr/include/wx-3.0" --exclude="/usr/include/log4cxx" ${EXCLUDE_C_FILES[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c,c++ -I@$CTAGS_IGNORE_DIR/c -R -f $CTAGS_OUTPUT_DIR/usr_include /usr/include
-
-      # Uses the $C_HEADERS_LIST_FILENAME variable to tell ctags to exclude specific files.
-      ctags --exclude="/usr/include/c++" --exclude=/usr/include/$CPP_TARGET/c++ --exclude="/usr/include/X11" --exclude=$BOOST_DIR --exclude="/usr/include/wx-3.0" --exclude="/usr/include/log4cxx" --exclude=@$C_HEADERS_LIST_FILENAME --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c,c++ -I@$CTAGS_IGNORE_DIR/c -R -f $CTAGS_OUTPUT_DIR/usr_include /usr/include
-    fi
-  else
-    # Newer implementation.  Let's just grab all /usr/include/*.h files and run them through ctags.
-    if [ "$DRY_RUN" == 1 ]; then
-      echo "ctags -n -f $CTAGS_OUTPUT_DIR/system --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c,c++ -I@$CTAGS_IGNORE_DIR/c /usr/include/*.h"
-    else
-      rm -f $CTAGS_OUTPUT_DIR/system
-
-      ctags -n -f $CTAGS_OUTPUT_DIR/system --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c,c++ -I@$CTAGS_IGNORE_DIR/c /usr/include/*.h
-    fi
   fi
 }
 
