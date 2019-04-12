@@ -16,7 +16,7 @@ jumping around header files easier via the `gf` command (or other commands using
 
 **Printing the version number**: `createtags -v` will print out the version number on standard output.
 
-**Displaying the command that __would__ have been run (dry-run mode)**: Running `createtags` with the `-n` option
+**Displaying the command that WOULD have been run (dry-run mode)**: Running `createtags` with the `-n` option
 will print the command to be run without actually running it.  Useful for debugging purposes.
 
 **Display the possible return values and their meanings**: `createtags -r` will generate a human-readable list of return values and their meanings.
