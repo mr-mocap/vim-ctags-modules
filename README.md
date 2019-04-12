@@ -8,18 +8,18 @@ Other vim-specific data is also output, namely data for inclusion in Vim's `path
 jumping around header files easier via the `gf` command (or other commands using the `path` variable).
 
 ## How To Use
-Running the program: Typing `createtags <module name>` will generate a tags file for the module.
+**Running the program**: Typing `createtags <module name>` will generate a tags file for the module.
 
-Getting help: `createtags` with no parameters will print out the program's help.
+**Getting help**: `createtags` with no parameters will print out the program's help.
 
-Listing Available Modules: `createtags -l` will generate a list of all the modules that are known.
+**Listing Available Modules**: `createtags -l` will generate a list of all the modules that are known.
 
-Printing the version number: `createtags -v` will print out the version number on standard output.
+**Printing the version number**: `createtags -v` will print out the version number on standard output.
 
-Displaying the command that **would** have been run (dry-run mode): Running `createtags` with the `-n` option
+**Displaying the command that __would__ have been run (dry-run mode)**: Running `createtags` with the `-n` option
 will print the command to be run without actually running it.  Useful for debugging purposes.
 
-Display the possible return values and their meanings: `createtags -r` will generate a human-readable list of return values and their meanings.
+**Display the possible return values and their meanings**: `createtags -r` will generate a human-readable list of return values and their meanings.
 
 ## Filesystem Structure
 bin
