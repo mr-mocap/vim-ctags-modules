@@ -1,0 +1,2 @@
+INPUT_FILES:/usr/include/*.h
+IGNORE:c
