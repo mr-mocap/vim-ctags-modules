@@ -1,3 +1,10 @@
 *~
-tags/
-vim_path/
+# Ignore everything in the tags directory (it's dynamically generated).
+tags/*
+
+# ... EXCEPT the README file!
+!tags/README
+
+# Same for the vim_path directory.
+vim_path/*
+!vim_path/README
