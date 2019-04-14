@@ -299,8 +299,7 @@ printsynopsis()
 {
   echo "Usage: createtags [OPTIONS] <module_name>"
   echo ""
-  echo "NOTE: c and cpp are special modules that aren't listed via the -l option."
-  echo "      The c module represents the header files for the C compilation environment."
+  echo "NOTE: The c module represents the header files for the C compilation environment."
   echo "      The cpp module represents the header files for the C++ compilation environment."
   echo
   echo "OPTIONS"
