@@ -1,0 +1,3 @@
+INPUT_DIRECTORY:/usr/include/wx-3.0
+PATH:/usr/include/wx-3.0
+PATH:/usr/lib/x86_64-linux-gnu/wx/include/**/
