@@ -204,7 +204,7 @@ generate_cpp_module_tags()
     # Hard-code in the main C++ directories to ignore via --exclude.  This allows us to provide a simple input of only a few recursive directories.
     ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c++ "$IGNORE_FILE" --recurse ${CPP_TAG_DIRECTORIES[@]}
 
-    # Output the appropriate Vim "path" setting for finding these files, one per line
+    # Output the appropriate Vim "path" setting for finding these files, one per line.
     rm -f $CTAGS_VIM_PATH_DIR/cpp
 
     for dir in ${CPP_TAG_DIRECTORIES[@]}; do
@@ -234,6 +234,7 @@ generatetagsformodule()
       local module_input_files=$(cat $module_filename | grep INPUT_FILES: | cut -d: -f2)
       local module_input_directory=$(cat $module_filename | grep INPUT_DIRECTORY: | cut -d: -f2)
       local module_ignore_files=$(cat $module_filename | grep IGNORE: | cut -d: -f2)
+      local module_path_outputs_array=($(cat $module_filename | grep PATH: | cut -d: -f2))
       local module_output_filename=$CTAGS_OUTPUT_DIR/$module
       local module_output_filename_option="-f $module_output_filename"
 
@@ -274,6 +275,7 @@ generatetagsformodule()
     echo "module input files = \"$module_input_files_option\""
     echo "module recursive option = \"$module_recursive_option\""
     echo "module igonore file option = \"$module_ignore_file_option\""
+    echo "module path output = \"${module_path_outputs_array[@]}\""
 
     if [ "$DRY_RUN" == 1 ]; then
       echo Dry-run generation of $module module tags...
@@ -281,6 +283,13 @@ generatetagsformodule()
     else
       echo Generating $module module tags...
       ctags -n $module_output_filename_option --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS ${module_ignore_file_option:+${module_ignore_file_option}} ${module_recursive_option:+${module_recursive_option}} $module_input_files_option
+
+      # Output the appropriate Vim "path" setting for finding these files, one per line.
+      rm -f $CTAGS_VIM_PATH_DIR/$module
+
+      for path_name in ${module_path_outputs_array[@]}; do
+        echo "$path_name" >>$CTAGS_VIM_PATH_DIR/$module
+      done
     fi
   fi
 }

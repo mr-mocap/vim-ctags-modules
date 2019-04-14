@@ -10,6 +10,10 @@ IGNORE          Gives a filename that is used for ignoring tags (ctags -I@$CTAGS
                 This allows for more than one module to share a single ignore file.
                 By default, the ignore file is the same as the module name and is located in the ignore directory, unless this is specified.
 PATH            List of one-or-more directories appropriate for adding to Vim's 'path' option.
+                NOTE: More than one "PATH:" line may be used and are accumulated in the output.
+                      Also, bash file globbing "**" can be used for outputting multiple subdirectories
+                      in the resultant vim_path/$MODULE output file.  There is currently NO WAY to pass
+                      the ** and * file searching patterns through to output vim_path/$MODULE file.
                 This is typically only specified if there are either:
                 1) Multiple directories that contain the header files. (ex: WxWidgets is spread across multiple directories)
                 2) The top-level directory for the module is not directly under "/usr/include", but
