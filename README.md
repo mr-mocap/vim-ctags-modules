@@ -32,11 +32,11 @@ Contains files for each standard of the C and C++ language.  Each file represent
 
 exclude
 ---
-Contains a file per module.  Each file lists, one per line, a pattern to pass to the --exclude option.  Used to exclude input files.
+Contains a file per module.  Each file lists, one per line, a pattern to pass to the --exclude option (to the underlying ctags program).  Used to exclude input files.
 
 ignore
 ---
-Contains a file per module.  Each file lists, one per line, a preprocessor macro to ignore.  These are passed to the -I option.
+Contains a file per module.  Each file lists, one per line, a preprocessor macro to ignore.  These are passed to the -I option (to the underlying ctags program).
 
 modules
 ---
