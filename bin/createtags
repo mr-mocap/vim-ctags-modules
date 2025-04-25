@@ -65,7 +65,6 @@ c_standard_include_files()
   done
 }
 
-
 # Outputs all of the header files, and their included files, for the
 # ANSI C standard headers.
 c_system_include_files()
@@ -100,14 +99,24 @@ generate_ctags_exclude_array()
   echo ${EXCLUDE[@]}
 }
 
-# Return: The filename containing the list of C headers used by the system.
-generate_c_headers_list_filename()
+install_dir()
 {
-  local INSTALL_DIR=$(gcc -print-search-dirs | grep install: | cut -d" " -f 2)
+  gcc -print-search-dirs | grep "install:" | cut -d" " -f 2
+}
+
+set_system_env_var()
+{
+  local INSTALL_DIR=$(install_dir)
 
   # Needed by c_system_include_files()
   SYSTEM=${INSTALL_DIR}include
   SYSTEM2=${INSTALL_DIR}include-fixed
+}
+
+# Return: The filename containing the list of C headers used by the system.
+generate_c_headers_list_filename()
+{
+  set_system_env_var
 
   # C
   # First, let's generate the list of headers that will be looked at and save that out to a file.
@@ -128,7 +137,7 @@ generate_c_module_tags()
 
   local C_TARGET_DIR="$MAIN_INCLUDE_DIR/$C_TARGET"
 
-  local INSTALL_DIR=$(gcc -print-search-dirs | grep "install:" | cut -d" " -f2)
+  local INSTALL_DIR=$(install_dir)
 
   if [ "$DRY_RUN" == 1 ]; then
     echo Dry-run generation of $MODULE_NAME module tags...
