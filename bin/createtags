@@ -49,11 +49,8 @@ generate_c_include_dirs_for_tags()
 {
   local C_VERSION=$(gcc -dumpversion)
 
-  # We will use this for looking in several places with this same directory structure
-  local C_INCLUDE_DIR_VERSION=${CPP_VERSION}
-
   for dir in $(generate_c_include_dirs); do
-    if [[ $dir == *"$C_INCLUDE_DIR_VERSION"* ]]; then
+    if [[ $dir == *"$C_VERSION"* ]]; then
       echo $dir
     fi
   done
@@ -69,11 +66,8 @@ generate_cpp_include_dirs_for_tags()
 {
   local CPP_VERSION=$(g++ -dumpversion)
 
-  # We will use this for looking in several places with this same directory structure
-  local CPP_INCLUDE_DIR_VERSION="c++/"${CPP_VERSION}
-
   for dir in $(generate_cpp_include_dirs); do
-    if [[ $dir == *"$CPP_INCLUDE_DIR_VERSION"* ]]; then
+    if [[ $dir == *"c++/$CPP_VERSION"* ]]; then
       echo $dir
     fi
   done
@@ -95,21 +89,21 @@ system_header_file_dependencies()
 c_standard_include_files()
 {
   local DIRS_TO_SEARCH=$(generate_c_include_dirs)
-  local INCLUDE_DIR=/usr/include
 
+  # For each header file...
   for file in $(cat $(find $CTAGS_FILES_DIR -name c[[:digit:]]* -print) );do
-    for dir in $(DIRS_TO_SEARCH); do
+    
+    # For each directory to search in...
+    for dir in $DIRS_TO_SEARCH; do
+
+      # Does the exact filename exist?
       if [[ -e $dir/$file ]]; then
+        # It DOES!  Print it out.
         echo $dir/$file
       fi
+      
     done
-#    if [[ -e ${INCLUDE_DIR}/$i ]]; then
-#      echo ${INCLUDE_DIR}/$i;
-#    elif [[ -e $SYSTEM/$i ]]; then
-#      echo $SYSTEM/$i
-#    elif [[ -e $SYSTEM2/$i ]]; then
-#      echo $SYSTEM2/$i
-#    fi
+
   done
 }
 
@@ -118,7 +112,6 @@ c_standard_include_files()
 c_system_include_files()
 {
   (while read -r line; do
-    #printf '%s\n' "$line"
     system_header_file_dependencies $line
   done <<< "$( c_standard_include_files )") | sort | uniq
 }
@@ -427,8 +420,6 @@ setoptions()
   return $OPTIND
 }
 
-echo $(generate_c_include_dirs)
-exit
 setoptions "$@"
 argstart=$?
 
