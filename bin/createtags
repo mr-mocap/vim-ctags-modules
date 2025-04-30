@@ -39,6 +39,46 @@ CTAGS_MODULE_NAME=unknown
 
 # Subroutines
 
+generate_c_include_dirs()
+{
+  # This will generate a list of directories that the compiler searches for #include <...> files, one per line
+  gcc -v -x c -E /dev/null 2>/dev/stdout 1>/dev/null | awk '/#include <...> search starts here:/ {flag=1; next} /End of search list./ {flag=0} flag' | cut -f 2 -d" "
+}
+
+generate_c_include_dirs_for_tags()
+{
+  local C_VERSION=$(gcc -dumpversion)
+
+  # We will use this for looking in several places with this same directory structure
+  local C_INCLUDE_DIR_VERSION=${CPP_VERSION}
+
+  for dir in $(generate_c_include_dirs); do
+    if [[ $dir == *"$C_INCLUDE_DIR_VERSION"* ]]; then
+      echo $dir
+    fi
+  done
+}
+
+generate_cpp_include_dirs()
+{
+  # This will generate a list of directories that the compiler searches for #include <...> files, one per line
+  g++ -v -x c++ -E /dev/null 2>/dev/stdout 1>/dev/null | awk '/#include <...> search starts here:/ {flag=1; next} /End of search list./ {flag=0} flag' | cut -f 2 -d" "
+}
+
+generate_cpp_include_dirs_for_tags()
+{
+  local CPP_VERSION=$(g++ -dumpversion)
+
+  # We will use this for looking in several places with this same directory structure
+  local CPP_INCLUDE_DIR_VERSION="c++/"${CPP_VERSION}
+
+  for dir in $(generate_cpp_include_dirs); do
+    if [[ $dir == *"$CPP_INCLUDE_DIR_VERSION"* ]]; then
+      echo $dir
+    fi
+  done
+}
+
 # Generate a list of header files that this header file includes.
 # Expects $1 to be the header file to output the dependencies of.
 # cpp -x c -M /usr/include/time.h | cut -d: -f2 | sed 's/ \\$//g' - | tr \\n ' '
@@ -54,14 +94,22 @@ system_header_file_dependencies()
 # Outputs the c standard include files (absolute path), one per line.
 c_standard_include_files()
 {
-  for i in $(cat $(find $CTAGS_FILES_DIR -name c[[:digit:]]* -print) );do
-    if [[ -e /usr/include/$i ]]; then
-      echo /usr/include/$i;
-    elif [[ -e $SYSTEM/$i ]]; then
-      echo $SYSTEM/$i;
-    elif [[ -e $SYSTEM2/$i ]]; then
-      echo $SYSTEM2/$i;
-    fi;
+  local DIRS_TO_SEARCH=$(generate_c_include_dirs)
+  local INCLUDE_DIR=/usr/include
+
+  for file in $(cat $(find $CTAGS_FILES_DIR -name c[[:digit:]]* -print) );do
+    for dir in $(DIRS_TO_SEARCH); do
+      if [[ -e $dir/$file ]]; then
+        echo $dir/$file
+      fi
+    done
+#    if [[ -e ${INCLUDE_DIR}/$i ]]; then
+#      echo ${INCLUDE_DIR}/$i;
+#    elif [[ -e $SYSTEM/$i ]]; then
+#      echo $SYSTEM/$i
+#    elif [[ -e $SYSTEM2/$i ]]; then
+#      echo $SYSTEM2/$i
+#    fi
   done
 }
 
@@ -110,6 +158,8 @@ set_system_env_var()
 
   # Needed by c_system_include_files()
   SYSTEM=${INSTALL_DIR}include
+
+  # This may not exist on more modern setups
   SYSTEM2=${INSTALL_DIR}include-fixed
 }
 
@@ -169,24 +219,9 @@ generate_c_module_tags()
 generate_cpp_module_tags()
 {
   local MODULE_NAME="cpp"
-  local MAIN_INCLUDE_DIR="/usr/include"
 
-  local CPP_VERSION=$(g++ -dumpversion)
-
-  # We will use this for looking in several places with this same directory structure
-  local CPP_INCLUDE_DIR_VERSION="c++/"${CPP_VERSION}
-
-  local CPP_TARGET=$(g++ -v 2>&1 | grep -e "Target:" | cut -d" " -f2)
-
-  # I don't know why I needed this line below.  Perhaps a special compiler installation?
-  #local INC_DIR=$(g++ -v 2>&1 | grep -P -e "--with-gxx-include-dir=[^ ]*" -o | cut -d= -f2)
-  local INC_DIR="$MAIN_INCLUDE_DIR/$CPP_INCLUDE_DIR_VERSION"
-
-  # The compiler-target dir
-  local CPP_TARGET_DIR="$MAIN_INCLUDE_DIR/$CPP_TARGET/$CPP_INCLUDE_DIR_VERSION"
-
-  # Generate an array containing all the directories to scan.
-  local CPP_TAG_DIRECTORIES=("$INC_DIR" "$CPP_TARGET_DIR")
+  # Generate an array containing all the directories to scan, but only for C++
+  mapfile -t CPP_TAG_DIRECTORIES < <(generate_cpp_include_dirs_for_tags)
 
   local EXCLUDE_PATHS=$(generate_ctags_exclude_array $MODULE_NAME)
 
@@ -214,12 +249,16 @@ generate_cpp_module_tags()
     ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c++ "$IGNORE_FILE" --recurse ${CPP_TAG_DIRECTORIES[@]}
 
     # Output the appropriate Vim "path" setting for finding these files, one per line.
-    rm -f $CTAGS_VIM_PATH_DIR/cpp
+    rm -f $CTAGS_VIM_PATH_DIR/$MODULE_NAME
 
-    for dir in ${CPP_TAG_DIRECTORIES[@]}; do
+    # We want to have all of the searched dirs here
+    for dir in $(generate_cpp_include_dirs); do
       echo "$dir" >>$CTAGS_VIM_PATH_DIR/$MODULE_NAME
     done
   fi
+
+  # Cleanup
+  unset CPP_TAG_DIRECTORIES
 }
 
 # Used for generating the tags for a generic "module".
@@ -388,6 +427,8 @@ setoptions()
   return $OPTIND
 }
 
+echo $(generate_c_include_dirs)
+exit
 setoptions "$@"
 argstart=$?
 
