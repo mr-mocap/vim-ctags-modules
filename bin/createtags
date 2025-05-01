@@ -49,6 +49,12 @@ generate_c_include_dirs_for_tags()
 {
   local C_VERSION=$(gcc -dumpversion)
 
+  # Let's use only the specific version directories.
+  # This basically filters out the more common lines,
+  # like /usr/include, /usr/local/include, ...
+  # 
+  # This is because we are only wanting directories that contain code
+  # for standard libraries or compiler specific definitions.
   for dir in $(generate_c_include_dirs); do
     if [[ $dir == *"$C_VERSION"* ]]; then
       echo $dir
@@ -66,6 +72,12 @@ generate_cpp_include_dirs_for_tags()
 {
   local CPP_VERSION=$(g++ -dumpversion)
 
+  # Let's use only the specific version directories.
+  # This basically filters out the more common lines,
+  # like /usr/include, /usr/local/include, ...
+  # 
+  # This is because we are only wanting directories that contain code
+  # for standard libraries or compiler specific definitions.
   for dir in $(generate_cpp_include_dirs); do
     if [[ $dir == *"c++/$CPP_VERSION"* ]]; then
       echo $dir
@@ -75,8 +87,7 @@ generate_cpp_include_dirs_for_tags()
 
 # Generate a list of header files that this header file includes.
 # Expects $1 to be the header file to output the dependencies of.
-# cpp -x c -M /usr/include/time.h | cut -d: -f2 | sed 's/ \\$//g' - | tr \\n ' '
-system_header_file_dependencies()
+c_system_header_file_dependencies()
 {
   #  For sed, first strip off the line-continuation character suffix (with preceeding space).
   #  Then strip off the leading space of the continued lines.
@@ -85,13 +96,50 @@ system_header_file_dependencies()
   cpp -x c -M $1 | cut -d: -f2 | sed 's/ \\$//g; s/^ //g' - | tr ' ' \\n
 }
 
-# Outputs the c standard include files (absolute path), one per line.
+# Generate a list of header files that this header file includes.
+# Expects $1 to be the header file to output the dependencies of.
+cpp_system_header_file_dependencies()
+{
+  #  For sed, first strip off the line-continuation character suffix (with preceeding space).
+  #  Then strip off the leading space of the continued lines.
+  #  Finally, we assume that any other spaces are the separators between filenames.  We then replace
+  #  those spaces with newlines.  Voiala! We have each filename on it's own line.
+  #
+  #  The -fcoroutines assumes at least c++20 and is necessary for the coroutines header.
+  cpp -x c++ -M $1 -fcoroutines | cut -d: -f2 | sed 's/ \\$//g; s/^ //g' - | tr ' ' \\n
+}
+
+# Outputs the C standard include files (absolute path), one per line.
 c_standard_include_files()
 {
   local DIRS_TO_SEARCH=$(generate_c_include_dirs)
 
+  # Find all the C language version files and print out the contents.
   # For each header file...
   for file in $(cat $(find $CTAGS_FILES_DIR -name c[[:digit:]]* -print) );do
+    
+    # For each directory to search in...
+    for dir in $DIRS_TO_SEARCH; do
+
+      # Does the exact filename exist?
+      if [[ -e $dir/$file ]]; then
+        # It DOES!  Print it out.
+        echo $dir/$file
+      fi
+      
+    done
+
+  done
+}
+
+# Outputs the C++ standard include files (absolute path), one per line.
+cpp_standard_include_files()
+{
+  local DIRS_TO_SEARCH=$(generate_cpp_include_dirs)
+
+  # Find all the C language version files and print out the contents.
+  # For each header file...
+  for file in $(cat $(find $CTAGS_FILES_DIR -name c++[[:digit:]]* -print) );do
     
     # For each directory to search in...
     for dir in $DIRS_TO_SEARCH; do
@@ -112,8 +160,17 @@ c_standard_include_files()
 c_system_include_files()
 {
   (while read -r line; do
-    system_header_file_dependencies $line
+    c_system_header_file_dependencies $line
   done <<< "$( c_standard_include_files )") | sort | uniq
+}
+
+# Outputs all of the header files, and their included files, for the
+# ANSI C++ standard headers.
+cpp_system_include_files()
+{
+  (while read -r line; do
+    cpp_system_header_file_dependencies $line
+  done <<< "$( cpp_standard_include_files )") | sort | uniq
 }
 
 # Input: $1 = filename containing header files, one per line.
@@ -169,22 +226,35 @@ generate_c_headers_list_filename()
   echo $C_HEADERS_LIST_FILENAME
 }
 
+# Return: The filename containing the list of C++ headers used by the system.
+generate_cpp_headers_list_filename()
+{
+  set_system_env_var
+
+  # C++
+  # First, let's generate the list of headers that will be looked at and save that out to a file.
+  local CPP_HEADERS_LIST_FILENAME=$(mktemp)
+
+  cpp_system_include_files >$CPP_HEADERS_LIST_FILENAME
+  echo $CPP_HEADERS_LIST_FILENAME
+}
+
 generate_c_module_tags()
 {
   local MODULE_NAME="c"
   local C_HEADERS_LIST_FILENAME=$(generate_c_headers_list_filename)
 
-  local C_TARGET=$(gcc -v 2>&1 | grep "Target:" | cut -d" " -f2)
+  local EXCLUDE_PATHS=$(generate_ctags_exclude_array $MODULE_NAME)
 
-  local MAIN_INCLUDE_DIR="/usr/include"
+  local IGNORE_FILE=""
 
-  local C_TARGET_DIR="$MAIN_INCLUDE_DIR/$C_TARGET"
-
-  local INSTALL_DIR=$(install_dir)
+  if [ -e "$CTAGS_IGNORE_DIR/$MODULE_NAME" ]; then
+    IGNORE_FILE="-I@$CTAGS_IGNORE_DIR/$MODULE_NAME"
+  fi
 
   if [ "$DRY_RUN" == 1 ]; then
     echo Dry-run generation of $MODULE_NAME module tags...
-    echo "ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME --c-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c --langmap=c:.h -I@$CTAGS_IGNORE_DIR/$MODULE_NAME -L $C_HEADERS_LIST_FILENAME"
+    echo "ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c --langmap=c:.h $IGNORE_FILE -L $C_HEADERS_LIST_FILENAME"
   else
     # Actually run the command.
     echo Generating $MODULE_NAME module tags...
@@ -192,14 +262,15 @@ generate_c_module_tags()
     rm -f $CTAGS_OUTPUT_DIR/$MODULE_NAME
 
     # Invoke ctags using the -L option to give the list of files to generate tags for.
-    ctags -n -f $CTAGS_OUTPUT_DIR/c --c-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c --langmap=c:.h -I@$CTAGS_IGNORE_DIR/$MODULE_NAME -L $C_HEADERS_LIST_FILENAME
+    ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --languages=c --langmap=c:.h $IGNORE_FILE -L $C_HEADERS_LIST_FILENAME
+    
+    # Output the appropriate Vim "path" setting for finding these files, one per line.
+    rm -f $CTAGS_VIM_PATH_DIR/$MODULE_NAME
 
-    # Generate a file containing appropriate Vim "path" settings, one per line.
-    echo "$MAIN_INCLUDE_DIR" >$CTAGS_VIM_PATH_DIR/$MODULE_NAME
-    echo "$C_TARGET_DIR" >>$CTAGS_VIM_PATH_DIR/$MODULE_NAME
-
-    # ASSUME: A directory that ends with "/" AND there are *.h files under it at some level.
-    echo "$INSTALL_DIR**" >>$CTAGS_VIM_PATH_DIR/$MODULE_NAME
+    # We want to have all of the searched dirs here
+    for dir in $(generate_c_include_dirs); do
+      echo "$dir" >>$CTAGS_VIM_PATH_DIR/$MODULE_NAME
+    done
 
     # Now let's setup for excluding these exact files from future generation of tags.
     #readarray EXCLUDE_C_FILES < <(convert_header_files_to_exclude_list $C_HEADERS_LIST_FILENAME)
@@ -212,9 +283,7 @@ generate_c_module_tags()
 generate_cpp_module_tags()
 {
   local MODULE_NAME="cpp"
-
-  # Generate an array containing all the directories to scan, but only for C++
-  mapfile -t CPP_TAG_DIRECTORIES < <(generate_cpp_include_dirs_for_tags)
+  local CPP_HEADERS_LIST_FILENAME=$(generate_cpp_headers_list_filename)
 
   local EXCLUDE_PATHS=$(generate_ctags_exclude_array $MODULE_NAME)
 
@@ -226,12 +295,11 @@ generate_cpp_module_tags()
 
   if [ "$DRY_RUN" == 1 ]; then
     echo Dry-run generation of $MODULE_NAME module tags...
-    echo "ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c,c++ "$IGNORE_FILE" --recurse ${CPP_TAG_DIRECTORIES[@]}"
+    echo "ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c,c++ $IGNORE_FILE -L $CPP_HEADERS_LIST_FILENAME"
   else
     # Let's be explicit about exactly what types of tags to generate.
     # NOTE: .tcc files are C++ template files.
     # GCC System stuff <sys/cdefs.h>
-    #
 
     echo Generating $MODULE_NAME module tags...
 
@@ -239,7 +307,7 @@ generate_cpp_module_tags()
     rm -f $CTAGS_OUTPUT_DIR/$MODULE_NAME
 
     # Hard-code in the main C++ directories to ignore via --exclude.  This allows us to provide a simple input of only a few recursive directories.
-    ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c++ "$IGNORE_FILE" --recurse ${CPP_TAG_DIRECTORIES[@]}
+    ctags -n -f $CTAGS_OUTPUT_DIR/$MODULE_NAME ${EXCLUDE_PATHS[@]} --c-kinds=$CPP_KINDS --c++-kinds=$CPP_KINDS --fields=$CPP_FIELDS --extra=$EXTRA_FIELDS --langmap=c++:+.tcc. --languages=c++ $IGNORE_FILE -L $CPP_HEADERS_LIST_FILENAME
 
     # Output the appropriate Vim "path" setting for finding these files, one per line.
     rm -f $CTAGS_VIM_PATH_DIR/$MODULE_NAME
@@ -250,8 +318,8 @@ generate_cpp_module_tags()
     done
   fi
 
-  # Cleanup
-  unset CPP_TAG_DIRECTORIES
+  # Erase the generated file.
+  rm -f $CPP_HEADERS_LIST_FILENAME
 }
 
 # Used for generating the tags for a generic "module".
